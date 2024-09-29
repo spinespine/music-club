@@ -1,6 +1,8 @@
 import csv
 import matplotlib.pyplot as plt
 import numpy as np
+import random
+import sys
 
 class member: # a person with their name and data
     def __init__(self, name):
@@ -13,8 +15,11 @@ with open('rankings.csv') as csvfile:
     for row in reader:
         rows.append(row)
 
-rows.pop(0) # remove header row
-rows.pop(0) # remove week row
+albums = rows.pop(0) # remove header row
+rows.pop(0) # remove week # row
+number_of_weeks = len(rows[0])
+albums.pop(0)
+albums.pop(14)
 
 members = [] # everyone in music club as a member object
 for row in rows:
@@ -49,11 +54,14 @@ for member in members: # calculate compatibility
             continue
 
         avg_delta = sum_of_differences / instances
-        member.deltas[friend.name] = avg_delta
+        multiplier = number_of_weeks - instances
+        multiplier *= 0.025
+        member.deltas[friend.name] = avg_delta * (1 + multiplier)
+        if member.name == 'Jaxson' and friend.name == 'Peter':
+            print(sum_of_differences, instances)
 
 weeks = [] # 2D array of scores
 week = 1
-number_of_weeks = len(rows[0])
 while week < number_of_weeks:
     weeks.append([])
     for row in rows:
@@ -74,17 +82,37 @@ for week in weeks:
         count += 1
     week_averages.append( round(total / count, 2) )
 
+plt.figure(figsize=(25, 6))
 for member in members: # get average deviation
     deviation_total = 0
     weeks_rated = 0
+    member_timeline = []
+    has_rated = False
+    current_deviation = -2.1
     for week, rating in enumerate(member.ratings):
-        if rating == '': continue
+        if rating == '': 
+            member_timeline.append(current_deviation)
+            continue
         weeks_rated += 1
         rating = int(rating)
         deviation = rating - week_averages[week]
         deviation_total += deviation
+        avg_deviation = deviation_total / weeks_rated
+        current_deviation = avg_deviation
+
+        if current_deviation > 2: current_deviation = 2
+
+        member_timeline.append( current_deviation )
+        print(avg_deviation)
+    
+    plt.plot(member_timeline, label = member.name)
     avg_deviation = deviation_total / weeks_rated
     member.avg_deviation = avg_deviation
+
+plt.xticks(ticks=range(len(albums)), labels=albums, rotation=45, ha="right")
+plt.ylim(-2.05, 2)
+plt.legend()
+plt.savefig('deviation_timeline.png', bbox_inches='tight')
 
 # print results
 class stat:
@@ -97,7 +125,7 @@ most_compatible.value = float('inf')
 
 most_incompatible = stat()
 
-print('\nCompatability Map')
+print('\nCompatibility Map')
 print('person\t\tdisagreement points')
 
 for member in members:
@@ -114,8 +142,11 @@ for member in members:
         member.sortedDeltas.append(newDelta)
 
         # stats stuff
-        formatted_delta = round(delta * 10)
+        formatted_delta = round(delta * 10, 1)
         friend_total += 1
+
+        if formatted_delta == -10:
+            continue
         
         if delta < member_most_compatible.value:
             member_most_compatible.value = delta
@@ -140,32 +171,32 @@ for member in members:
         formatted_delta = round(delta.value * 10, 1)
         tab = '\t'
         if len(delta.friend) < 8: tab += '\t'
-        print(delta.friend + tab + 'tab.' + str(formatted_delta))
+        if formatted_delta > -1:
+            print(delta.friend + tab + str(formatted_delta))
 
     # stats stuff
     member.avg_agreeability = round(member.disagreement_points / member.data_points, 2)
 
-    member_most_compatible.value = str( round(member_most_compatible.value * 10, 1) )
-    member_least_compatible.value = str( round(member_least_compatible.value * 10, 1) )
+    member_most_compatible.value = str( round(member_most_compatible.value * 10, 2) )
+    member_least_compatible.value = str( round(member_least_compatible.value * 10, 2) )
     print('most compatible with', member_most_compatible.friend, '(' + 
           member_most_compatible.value + ')')
     print('least compatible with', member_least_compatible.friend, '(' + 
           member_least_compatible.value + ')')
     
-print("\n(Compatability is calculated from the average rating differece between you and another club member, multiplied by 10 for legibility)")
+print("\n(Compatibility is calculated from the average rating differece between you and another club member, multiplied by 10 for legibility)")
 
 print('\n' + 'most compatible pair:', 
       most_compatible.member, 'and', 
       most_compatible.friend, 'with',
       most_compatible.value, 'disagreement points.' )
-
-print("Over 18 meetings, Jaxson and Peter's rating differences total a mere 13. I'm excluding Midnight & Disconnect whose total was 0 as they only rated the same album once.")
+print("Over 24 meetings, Jaxson and Peter's rating differences total 16.")
 
 print('\n' + 'most incompatible pair:', 
       most_incompatible.member, 'and', 
       most_incompatible.friend, 'with',
       most_incompatible.value, 'disagreement points.' )
-print("Over 6 meetings, Yumi and Disconnect's rating differences total 19. Oof.")
+print("Over 3 meetings, Alex and Habibi's rating differences total 11.")
 
 print('\n' + "members by typical deviation from average score:")
 for member in sorted(members, key=lambda m: m.avg_deviation, reverse=True):
@@ -225,4 +256,91 @@ cbar.ax.yaxis.set_label_position('left')
 cbar.set_label('incompatibility')
 
 fig.tight_layout()
-plt.show()
+plt.savefig('heatmap.png', bbox_inches='tight')
+
+members_and_ratings = {}
+
+plt.figure(figsize=(25, 15))
+
+albumLabels = []
+for album in albums:
+    albumLabels.append(album)
+
+for member in members:
+    members_and_ratings[member.name] = []
+
+    for i, rating in enumerate(member.ratings):
+        members_and_ratings[member.name].append(rating)
+
+# plot lines
+i = 0
+for (member, ratings) in members_and_ratings.items():
+    for week, rating in enumerate(ratings):
+        if rating == '':
+            ratings[week] = None
+        else:
+            ratings[week] = int(rating) + i
+
+    i += 0.05
+    plt.plot(ratings, label = member)
+
+plt.xticks(ticks=range(len(albums)), labels=albumLabels, rotation=45, ha="right")
+plt.legend()
+plt.savefig('timeline.png', bbox_inches='tight')
+
+for member in members:
+
+    print(member.name)
+
+    top3 = []
+    for delta in member.sortedDeltas:
+        print(delta.value)
+        if delta.value != -1:
+            top3.append(delta.friend)
+            if len(top3) == 3:
+                break
+
+    bottom3 = [member.sortedDeltas[-1].friend, member.sortedDeltas[-2].friend, member.sortedDeltas[-3].friend]
+
+    print(top3)
+    print(bottom3)
+
+    plt.figure(figsize=(25, 6))
+    for topFriend in top3:
+        relevantPoints = []
+        for i, rating in enumerate(members_and_ratings[member.name]):
+            if rating == None:
+                relevantPoints.append(None)
+            else:
+                relevantPoints.append(members_and_ratings[topFriend][i])
+
+        plt.plot( relevantPoints, label = topFriend, marker='o' )
+
+    plt.title(member.name + ' and their most compatible friends')
+    plt.plot(members_and_ratings[member.name], label = member.name, marker='*', color = 'black')
+    plt.xticks(ticks=range(len(albums)), labels=albumLabels, rotation=45, ha="right")
+    plt.ylim(-4.5, 5.5)  # Limit Y axis from -4 to 5
+    plt.yticks(range(-4, 6))  # Set Y ticks as integers from -4 to 5
+    plt.legend()
+    plt.savefig('member timelines/{name}-close.png'.format(name = member.name), bbox_inches='tight')
+
+    plt.figure(figsize=(25, 6))
+    for bottomFriend in bottom3:
+        relevantPoints = []
+        for i, rating in enumerate(members_and_ratings[member.name]):
+            if rating == None:
+                relevantPoints.append(None)
+            else:
+                relevantPoints.append(members_and_ratings[bottomFriend][i])
+
+        plt.plot( relevantPoints, label = bottomFriend, marker='x')
+
+    plt.title(member.name + ' and their least compatible friends')
+    plt.plot(members_and_ratings[member.name], label = member.name, marker='*', color = 'black')
+    plt.xticks(ticks=range(len(albums)), labels=albumLabels, rotation=45, ha="right")
+    plt.ylim(-4.5, 5.5)  # Limit Y axis from -4 to 5
+    plt.yticks(range(-4, 6))  # Set Y ticks as integers from -4 to 5
+    plt.legend()
+    plt.savefig('member timelines/{name}-far.png'.format(name = member.name), bbox_inches='tight')
+
+
